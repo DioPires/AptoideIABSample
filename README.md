@@ -1,82 +1,91 @@
-# Aptoide IAB
+# AppCoins SDK
 
+AppCoins SDK lets you sell digital content from inside applications.
 
-Aptoide IAB lets you sell digital content from inside applications.
+## Abstract
 
+This tutorial will guide through the process of integrating the AppCoins SDK.
+You should be able to get it up and running in less than 10 minutes.
 
-## Architecture
+### Prerequisites
 
++ In order for the AppCoins SDK to work, you must have an AppCoins compliant wallet (trust link) installed.
++ The Android minimum API Level to use AppCoins SDK is 21 (Android 5.0).
++ Basic understanding of RxJava is advised, but now required.
 
-Aptoide exposes a Android Service which your application should bind with. Once bound to Aptoide service your application can start communicating over IPC using an AIDL inteface.
+## Getting Started
 
+To integrate the AppCoins SDK, you only need an instance of the AppCoinsSdk interface.
+For the sake of simplicity, in the sample code we just hold a static referecence to the AppCoins SDK instance in the Application class.
 
-## Google Play IAB to Aptoide IAB Migration
+```
+  public static AppCoinsSdk appCoinsSdk;
 
+  private final String developerAddress = "0x4fbcc5ce88493c3d9903701c143af65f54481119";
 
-### AIDL
+  @Override public void onCreate() {
+    super.onCreate();
 
-Like Google Play IAB, Aptoide IAB uses a AIDL file in order to communicate with Aptoide service. The package for your AIDL must be **cm.aptoide.pt.iab** instead of **com.android.vending.billing**. Both Aptoide and Google AIDL files are identical, but you need to rename **InAppBillingService.aild** to **AptoideInAppBillingService.aidl**.
+    appCoinsSdk = new AppCoinsSdkBuilder(developerAddress).withSkus(buildSkus())
+        .withDebug(true)
+        .createAppCoinsSdk();
+  }
 
-![Migration](docs/aidl-migration.png)
+  private List<SKU> buildSkus() {
+    List<SKU> skus = new LinkedList<>();
 
-### Permissions
+    skus.add(new SKU(SKU_GAS_NAME, SKU_GAS, BigDecimal.valueOf(5)));
+    skus.add(new SKU(SKU_PREMIUM_NAME, SKU_PREMIUM, BigDecimal.TEN));
 
-Your application needs a permission to allow it to perform billing actions with Aptoide IAB. The permission is declared in **AndroidManifest.xml** of your application. Google Play IAB already declares a permision with name **com.android.vending.BILLING** you should rename it to **cm.aptoide.pt.permission.BILLING**.
+    return skus;
+  }
+```
 
+Here we use a convenient builder to create our AppCoinsSDK instance with a list consisting of two products.
+The debug flag will set the AppCoins SDK to use the testnet (ropsten) instead of the mainnet.
 
-**Google Play IAB**
+Given the Android architecture, you will have to let the sdk know each time a Purchase Flow is finished. For that, just inform the sdk:
 
-	<uses-permission android:name="com.android.vending.BILLING" />
+```
+@Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    appCoinsSdk.onActivityResult(requestCode, requestCode, data);
+}
+```
 
-**Aptoide IAB**
+AppCoins Sdk's onActivityResult will return true if handled, or false otherwise. In case you want to do some conditional here.
 
-	<uses-permission android:name="cm.aptoide.pt.permission.BILLING" />
+To start the purchase flow, you have to pass one of the previously defined SKU_IDs, and the activity that will be used to call the Wallet:
 
-### Service Connection
+```
+appCoinsSdk.buy(SKU_GAS, this);
+```
 
-In order to communicate with Aptoide IAB your application must bind to a service the same way Google Play IAB. Google Play IAB Intent action and package must be updated from **com.android.vending.billing.InAppBillingService.BIND** to **cm.aptoide.pt.iab.action.BIND** and from **com.android.vending** to **cm.aptoide.pt** respectively.
+And finally, we want to react to the purchase, so we can reflect that change in our's App's state.
 
+Following is a good pattern to follow:
 
-**Google IAB Service Intent**
+```
+@Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    super.onActivityResult(requestCode, resultCode, data);
 
-	Intent serviceIntent = new Intent("com.android.vending.billing.InAppBillingService.BIND");
-	serviceIntent.setPackage("com.android.vending");
+    if (appCoinsSdk.onActivityResult(requestCode, requestCode, data)) {
+      appCoinsSdk.getLastPayment()
+          .subscribe(paymentDetails -> runOnUiThread(() -> {
+            if (paymentDetails.getPaymentStatus() == PaymentStatus.SUCCESS) {
+              String skuId = paymentDetails.getSkuId();
+              // Now we tell the sdk to consume the skuId.
+              appCoinsSdk.consume(skuId);
 
-**Aptoide IAB Service Intent**
+              // Purchase successfully done. Release the prize.
+            }
+          }));
+    }
+  }
+```
 
-	Intent serviceIntent = new Intent("cm.aptoide.pt.iab.action.BIND");
-	serviceIntent.setPackage("cm.aptoide.pt");
-	
+First we check if it was the AppCoins SDK who made us leave the current activity, and if so, we will react to the purchase result.
+In order to complete the purchase flow, we must consume the purchase.
 
-### Aptoide Public Key
+### Sample Code
 
-Just like Google Play IAB, Aptoide IAB also exposes a public key. You should use Aptoide public key to verify your purchases. It works exactly like Google Play IAB key so you just need to replace each other.
-
-To find your Aptoide public key go to [Aptoide Back Office -> My Apps -> Catalogue -> Certified Apps](https://www.aptoide.com/account/certified-apps). You can click In-app button and the key will be presented.
-
-
-### Purchase Broadcast
-
-Google Play IAB broadcasts and Intent with action **com.android.vending.billing.PURCHASES_UPDATED**. Aptoide IAB does not do that therefore any code related with listening to that Intent can be removed.
-
-
-# Known Issues
-
-
-* Aptoide IAB is not compliant with [Google Play IAB v5](https://developer.android.com/google/play/billing/versions.html). Calls to **getBuyIntentToReplaceSkus** method will always fail.
-* Aptoide IAB only works with Aptoide 8.0.0.0 and above.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+This repo holds a sample code bla bla bla lol
